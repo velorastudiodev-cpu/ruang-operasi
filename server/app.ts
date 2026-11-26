@@ -3,7 +3,6 @@ import { resolve } from 'node:path'
 import { argon2id, hash } from 'argon2'
 import Fastify from 'fastify'
 import cookie from '@fastify/cookie'
-import fastifyStatic from '@fastify/static'
 import swagger from '@fastify/swagger'
 import { ZodError, z } from 'zod'
 import { authRoutes } from './auth.js'
@@ -144,7 +143,10 @@ export async function buildApp(options: AppOptions = {}) {
 
     const staticRoot = resolve('dist')
     const hasFrontend = options.serveFrontend !== false && existsSync(resolve(staticRoot, 'index.html'))
-    if (hasFrontend) await app.register(fastifyStatic, { root: staticRoot })
+    if (hasFrontend) {
+      const { default: fastifyStatic } = await import('@fastify/static')
+      await app.register(fastifyStatic, { root: staticRoot })
+    }
     app.setNotFoundHandler((request, reply) => {
       if (hasFrontend && request.method === 'GET' && !request.url.startsWith('/api/') && !request.url.startsWith('/assets/')) {
         return reply.sendFile('index.html', { maxAge: 0 })
