@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ruang
+      POSTGRES_USER: ruang
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Isi POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ruang -d ruang"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Isi DATABASE_URL dengan host db}
+      APP_ORIGIN: ${APP_ORIGIN:?Isi APP_ORIGIN dengan URL HTTPS}
+      INGEST_API_KEY: ${INGEST_API_KEY:?Isi INGEST_API_KEY}
+      SMTP_URL: ${SMTP_URL:?Isi SMTP_URL}
+      SMTP_FROM: ${SMTP_FROM:?Isi SMTP_FROM}
+      INIT_ADMIN_EMAIL: ${INIT_ADMIN_EMAIL:-}
+      INIT_ADMIN_PASSWORD: ${INIT_ADMIN_PASSWORD:-}
+      TRUST_PROXY: "true"
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - app_data:/app/.data
+volumes:
+  postgres_data:
+  app_data:
