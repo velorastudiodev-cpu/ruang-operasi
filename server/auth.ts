@@ -44,7 +44,7 @@ export async function authRoutes(app: FastifyInstance, db: Database, config: { s
     const isWrite = !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
     const isIngest = request.url.split('?')[0] === '/api/ingest/orders'
     const origin = request.headers.origin
-    const expected = config.origin ?? `http://${request.headers.host}`
+    const expected = config.origin ?? `${request.protocol}://${request.host}`
     if (isWrite && !isIngest && (request.headers['sec-fetch-site'] === 'cross-site' || (origin && origin !== expected))) {
       throw new ApiError(403, 'ORIGIN_INVALID', 'Asal permintaan tidak diizinkan.')
     }
@@ -138,7 +138,7 @@ export async function authRoutes(app: FastifyInstance, db: Database, config: { s
   })
 
   function inviteLink(request: FastifyRequest, token: string) {
-    return `${config.origin ?? `http://${request.headers.host}`}/?undangan=${token}`
+    return `${config.origin ?? `${request.protocol}://${request.host}`}/?undangan=${token}`
   }
 
   app.post('/api/users', { schema: schema('Undang anggota', ['Pengguna'], { body: inviteInput }) }, async (request, reply) => {

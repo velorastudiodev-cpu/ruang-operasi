@@ -58,6 +58,10 @@ X-API-Key: local-demo-ingest-key
 
 Untuk saldo awal produksi, masukkan hasil hitung gudang ke `products` dan catat saldo positif sebagai `stock_movements` dengan `ref_type='opening'` dalam transaksi yang sama. Gunakan SKU unik. Sesudahnya, catat koreksi fisik melalui halaman stok.
 
+## Demo di Vercel
+
+Konfigurasi Vercel menyajikan frontend Vite dan satu fungsi Fastify. Pilih peran pada bagian **Coba data demo** untuk masuk. Fungsi menggunakan database demo dalam memori. Data, sesi, dan hasil ekspor dapat hilang ketika instance dimulai ulang. Ekspor diproses saat riwayat dimuat, sedangkan KPI diperbarui sesuai permintaan. Gunakan data sintetis untuk demo ini.
+
 ## Produksi
 
 Siapkan PostgreSQL 16 dan layanan SMTP. Isi variabel pada `.env.example`, gunakan URL HTTPS publik pada `APP_ORIGIN`, dan atur kredensial Admin awal sebelum startup pertama. Mode produksi mengaktifkan cookie Secure dan mewajibkan HTTPS. Jika memakai Compose, set `POSTGRES_PASSWORD` dan gunakan host `db` pada `DATABASE_URL`. Jalankan `docker compose up -d --build` di belakang reverse proxy yang mengakhiri TLS dan menetapkan `X-Forwarded-Proto`. Port aplikasi di Compose terikat ke loopback.

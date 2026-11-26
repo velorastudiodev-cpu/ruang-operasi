@@ -35,7 +35,7 @@ async function alertOnCrossing(sql: Sql, before: Product, after: Product, origin
 }
 
 export function stockRoutes(app: FastifyInstance, db: Database, origin?: string) {
-  const siteOrigin = (request: FastifyRequest) => origin ?? `http://${request.headers.host}`
+  const siteOrigin = (request: FastifyRequest) => origin ?? `${request.protocol}://${request.host}`
   app.get('/api/products', { schema: schema('Daftar stok produk', ['Stok'], { query: productQuery }) }, async (request) => {
     requireUser(request)
     const query = productQuery.parse(request.query)

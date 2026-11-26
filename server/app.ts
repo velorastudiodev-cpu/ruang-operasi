@@ -28,6 +28,8 @@ interface AppOptions {
   logger?: boolean
   trustProxy?: boolean
   jobs?: boolean
+  onDemand?: boolean
+  serveFrontend?: boolean
   admin?: { email: string; password: string }
 }
 
@@ -65,7 +67,7 @@ export async function buildApp(options: AppOptions = {}) {
       return refreshing
     }
     await refreshKpi()
-    const refreshTimer = setInterval(() => {
+    const refreshTimer = options.onDemand ? undefined : setInterval(() => {
       void refreshKpi().catch((err: unknown) => app.log.error({ err }, 'Gagal menyegarkan KPI'))
     }, 60_000)
     app.addHook('preClose', async () => {
@@ -114,7 +116,7 @@ export async function buildApp(options: AppOptions = {}) {
       return reply.code(500).send({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi masalah di server. Coba lagi.' } })
     })
 
-    await authRoutes(app, db, { secure: options.secure ?? false, origin: options.origin, previewMail: !options.secure && !options.smtp })
+    await authRoutes(app, db, { secure: options.secure ?? false, origin: options.origin, previewMail: !!options.demo && !options.smtp })
     app.get('/api/auth/options', { schema: { hide: true } }, () => ({ demo: !!options.demo }))
     orderRoutes(app, db, options.ingestKey ?? '')
     stockRoutes(app, db, options.origin)
@@ -132,14 +134,16 @@ export async function buildApp(options: AppOptions = {}) {
       `, [page_size, (page - 1) * page_size])
       return { items: result.items, total: Number(result.total), page, page_size }
     })
-    app.get('/healthz', { schema: schema('Kesehatan aplikasi dan database', ['Sistem'], { public: true }) }, async () => {
+    const health = async () => {
       await db.rows('SELECT 1')
       return { status: 'ok' }
-    })
+    }
+    app.get('/healthz', { schema: schema('Kesehatan aplikasi dan database', ['Sistem'], { public: true }) }, health)
+    if (options.onDemand) app.get('/api/healthz', { schema: { hide: true } }, health)
     app.get('/api/openapi.json', { schema: { hide: true } }, () => app.swagger())
 
     const staticRoot = resolve('dist')
-    const hasFrontend = existsSync(resolve(staticRoot, 'index.html'))
+    const hasFrontend = options.serveFrontend !== false && existsSync(resolve(staticRoot, 'index.html'))
     if (hasFrontend) await app.register(fastifyStatic, { root: staticRoot })
     app.setNotFoundHandler((request, reply) => {
       if (hasFrontend && request.method === 'GET' && !request.url.startsWith('/api/') && !request.url.startsWith('/assets/')) {
@@ -148,18 +152,20 @@ export async function buildApp(options: AppOptions = {}) {
       return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Halaman atau endpoint tidak ditemukan.' } })
     })
 
-    if (options.jobs !== false) {
-      const stopJobs = startJobs(db, {
+    const jobs = options.jobs === false ? undefined : startJobs(db, {
         folder: resolve(options.dataFolder ?? '.data'),
         origin: options.origin ?? 'http://localhost:5173',
         smtp: options.smtp,
         from: options.smtpFrom ?? 'Ruang Operasi <ruang-operasi@example.test>',
+        onDemand: options.onDemand,
         warn: (err) => app.log.warn({ err }, 'Job latar belakang gagal'),
       })
-      app.addHook('preClose', stopJobs)
-    }
+    if (jobs) app.addHook('preClose', jobs.close)
     await app.ready()
-    return { app, db, refreshKpi }
+    return {
+      app, db, refreshKpi, runJobs: jobs?.run,
+      refreshKpiIfDue: () => Date.now() - Date.parse(refreshedAt) >= 60_000 ? refreshKpi() : Promise.resolve(),
+    }
   } catch (error) {
     await app.close()
     throw error

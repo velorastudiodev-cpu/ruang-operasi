@@ -46,7 +46,7 @@ async function writeExport(db: Database, filters: Filters, temporary: string) {
   }
 }
 
-export function startJobs(db: Database, opts: { folder: string; origin: string; smtp?: string; from: string; warn: (error: unknown) => void }) {
+export function startJobs(db: Database, opts: { folder: string; origin: string; smtp?: string; from: string; onDemand?: boolean; warn: (error: unknown) => void }) {
   const transport = opts.smtp ? nodemailer.createTransport(opts.smtp) : undefined
   const running = new Set<Promise<void>>()
   const activeKinds = new Set<string>()
@@ -129,15 +129,17 @@ export function startJobs(db: Database, opts: { folder: string; origin: string; 
     })
     running.add(promise)
   }
-  const worker = setInterval(() => {
+  async function run() {
     launch('email', () => processOne('email'))
     launch('export', () => processOne('export'))
-  }, 1000)
-  const cleanup = setInterval(() => launch('cleanup', expireFiles), 600_000)
-  return async () => {
+    await Promise.all(running)
+  }
+  const worker = opts.onDemand ? undefined : setInterval(() => void run(), 1000)
+  const cleanup = opts.onDemand ? undefined : setInterval(() => launch('cleanup', expireFiles), 600_000)
+  return { run, async close() {
     clearInterval(worker)
     clearInterval(cleanup)
     await Promise.all(running)
     transport?.close()
-  }
+  } }
 }

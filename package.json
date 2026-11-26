@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "concurrently -k -n api,web \"tsx watch server/index.ts\" \"vite --host 127.0.0.1\"",
     "build": "tsc --noEmit && vite build",
-    "lint": "eslint src server shared tests vite.config.ts",
+    "lint": "eslint src server shared api tests vite.config.ts",
     "check": "tsc --noEmit",
     "start": "tsx server/index.ts",
     "migrate": "tsx server/index.ts --migrate",

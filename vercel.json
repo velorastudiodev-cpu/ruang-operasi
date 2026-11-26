@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/*.ts": {
+      "includeFiles": "{server/schema.sql,node_modules/@electric-sql/pglite/dist/**}",
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/healthz", "destination": "/api/healthz" },
+    { "source": "/:page(masuk|pesanan|stok|pengguna|audit)", "destination": "/index.html" }
+  ]
+}
