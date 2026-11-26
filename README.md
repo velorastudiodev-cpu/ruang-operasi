@@ -60,7 +60,9 @@ Untuk saldo awal produksi, masukkan hasil hitung gudang ke `products` dan catat 
 
 ## Demo di Vercel
 
-Konfigurasi Vercel menyajikan frontend Vite dan satu fungsi Fastify. Pilih peran pada bagian **Coba data demo** untuk masuk. Fungsi menggunakan database demo dalam memori. Data, sesi, dan hasil ekspor dapat hilang ketika instance dimulai ulang. Ekspor diproses saat riwayat dimuat, sedangkan KPI diperbarui sesuai permintaan. Gunakan data sintetis untuk demo ini.
+Konfigurasi Vercel menyajikan frontend Vite dan satu fungsi Fastify. Pilih peran pada bagian **Coba data demo** untuk masuk. Atur `DEMO_SESSION_SECRET` sebagai variabel rahasia di Vercel sebelum deploy. Gunakan nilai acak minimal 32 karakter dan pertahankan nilai yang sama di setiap deploy pada lingkungan tersebut. Fungsi memakai nilai ini untuk memverifikasi sesi ketiga akun demo bawaan di setiap instance. Sesi berakhir setelah delapan jam tanpa aktivitas pada API.
+
+Database demo disimpan dalam memori. Perubahan data, akun undangan, dan hasil ekspor dapat hilang saat instance berganti. Ekspor diproses saat riwayat dimuat, sedangkan KPI diperbarui sesuai permintaan. Gunakan data sintetis untuk demo ini.
 
 ## Produksi
 

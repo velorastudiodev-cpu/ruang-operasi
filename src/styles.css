@@ -54,6 +54,10 @@ h2 { font-size: 19px; font-weight: 800; line-height: 1.25; }
 .text-button:hover { color: #3a2498; text-decoration: underline; text-underline-offset: 3px; }
 .spin { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes appear { from { opacity: .55; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+.modal[open], .account-menu[open] .account-panel, .toast { animation: appear .18s ease-out; }
+@keyframes page-appear { from { opacity: .6; } to { opacity: 1; } }
+.content, .login-form { animation: page-appear .18s ease-out; }
 
 .shell { min-height: 100dvh; display: grid; grid-template-columns: var(--side-width) minmax(0, 1fr); }
 .sidebar {

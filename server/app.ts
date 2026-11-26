@@ -18,6 +18,7 @@ interface AppOptions {
   databaseUrl?: string
   databasePath?: string
   demo?: boolean
+  demoSessionSecret?: string
   secure?: boolean
   origin?: string
   ingestKey?: string
@@ -33,6 +34,10 @@ interface AppOptions {
 }
 
 export async function buildApp(options: AppOptions = {}) {
+  const demoSessionSecret = options.demoSessionSecret
+  if (demoSessionSecret !== undefined && (!options.demo || !options.secure || demoSessionSecret.length < 32)) {
+    throw new Error('DEMO_SESSION_SECRET memerlukan setidaknya 32 karakter, mode demo, dan HTTPS.')
+  }
   const app = Fastify({
     logger: options.logger ? {
       serializers: {
@@ -74,7 +79,7 @@ export async function buildApp(options: AppOptions = {}) {
       await refreshing?.catch(() => undefined)
     })
 
-    await app.register(cookie)
+    await app.register(cookie, { secret: demoSessionSecret })
     await app.register(swagger, {
       openapi: {
         info: { title: 'Ruang Operasi API', version: '0.1.0', description: 'Operasi penjualan, pesanan, stok, dan pengguna. Sertakan header X-CSRF-Token dari sesi untuk perubahan terautentikasi.' },
@@ -115,7 +120,12 @@ export async function buildApp(options: AppOptions = {}) {
       return reply.code(500).send({ error: { code: 'INTERNAL_ERROR', message: 'Terjadi masalah di server. Coba lagi.' } })
     })
 
-    await authRoutes(app, db, { secure: options.secure ?? false, origin: options.origin, previewMail: !!options.demo && !options.smtp })
+    await authRoutes(app, db, {
+      secure: options.secure ?? false,
+      origin: options.origin,
+      previewMail: !!options.demo && !options.smtp,
+      portableDemoSessions: demoSessionSecret !== undefined,
+    })
     app.get('/api/auth/options', { schema: { hide: true } }, () => ({ demo: !!options.demo }))
     orderRoutes(app, db, options.ingestKey ?? '')
     stockRoutes(app, db, options.origin)

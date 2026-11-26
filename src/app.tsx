@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryFilters } from '@tanstack/react-query'
 import {
   ArrowRight, Bell, Boxes, ChevronDown, ChevronRight, CircleHelp, Eye, EyeOff, History, LayoutGrid,
   LockKeyhole, LogOut, Menu, Package, PanelTop, ShoppingBag, Users, X,
@@ -12,6 +12,8 @@ import { Audit, Team } from './team'
 import { ErrorState, FormError, Loading, longDay, Modal, Spinner, Toast } from './ui'
 
 const Dashboard = lazy(() => import('./dashboard').then((module) => ({ default: module.Dashboard })))
+const sessionKey = ['session'] as const
+const accountQueries: QueryFilters = { predicate: ({ queryKey }) => queryKey[0] !== 'session' && queryKey[0] !== 'login-options' }
 
 const getUrl = () => window.location.pathname + window.location.search
 function safeReturn(value: string | null) {
@@ -52,7 +54,7 @@ function follow(event: MouseEvent<HTMLAnchorElement>, target: string, navigate: 
 function Mark() { return <span className="brand-mark"><Boxes size={23} strokeWidth={1.95} aria-hidden="true" /></span> }
 function Brand() { return <span className="brand"><Mark /><span>ruang<span className="brand-period">.</span><small>OPERASI</small></span></span> }
 
-function Login({ invite, session, onAuth, onCancelInvite }: { invite: string | null; session?: Session | null; onAuth: (session: Session) => void; onCancelInvite: () => void }) {
+function Login({ invite, session, onAuth, onCancelInvite }: { invite: string | null; session?: Session | null; onAuth: (session: Session) => Promise<void>; onCancelInvite: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -114,9 +116,9 @@ export function App() {
   const nav = useRef<HTMLElement>(null)
   const query = useQueryClient()
   const sessionQuery = useQuery({
-    queryKey: ['session'],
-    queryFn: () => api<Session>('/auth/session', { background: true }).catch((err: unknown) => {
-      if (err instanceof RequestError && err.status === 401) return null
+    queryKey: sessionKey,
+    queryFn: ({ signal }) => api<Session>('/auth/session', { background: true, signal }).catch((err: unknown) => {
+      if (err instanceof RequestError && err.unauthenticated) return null
       throw err
     }),
     staleTime: 60_000,
@@ -130,13 +132,15 @@ export function App() {
   const invitation = params.get('undangan')
   const firstPage = user?.role === 'warehouse' ? '/pesanan' : '/'
   useEffect(() => {
-    const clear = () => {
-      query.removeQueries({ predicate: ({ queryKey }) => queryKey[0] !== 'session' })
-      query.setQueryData(['session'], null)
+    const verifySession = () => {
+      void query.invalidateQueries({ queryKey: sessionKey }, { cancelRefetch: false })
     }
-    window.addEventListener('session-expired', clear)
-    return () => window.removeEventListener('session-expired', clear)
+    window.addEventListener('session-check-required', verifySession)
+    return () => window.removeEventListener('session-check-required', verifySession)
   }, [query])
+  useEffect(() => {
+    if (session === null) query.removeQueries(accountQueries)
+  }, [query, session])
   useEffect(() => {
     if (session === null && path !== '/masuk' && !invitation) {
       go(`/masuk?kembali=${encodeURIComponent(url)}`, true)
@@ -164,9 +168,9 @@ export function App() {
 
   const logout = useMutation({
     mutationFn: () => api('/auth/logout', { method: 'POST', csrf: session?.csrf_token }),
-    onSuccess: () => {
-      query.removeQueries({ predicate: ({ queryKey }) => queryKey[0] !== 'session' })
-      query.setQueryData(['session'], null)
+    onSuccess: async () => {
+      await query.cancelQueries({ queryKey: sessionKey })
+      query.setQueryData(sessionKey, null)
       setToast('')
       setShowNav(false)
       go('/masuk', true)
@@ -180,9 +184,10 @@ export function App() {
   })
   if (sessionQuery.isPending && !invitation) return <main className="app-loading"><Brand /><Spinner size={24} /><span className="sr-only">Memeriksa sesi</span></main>
   if (sessionQuery.isError && !session && !invitation) return <main className="app-loading"><ErrorState error={sessionQuery.error} retry={() => void sessionQuery.refetch()} /></main>
-  if (!session || invitation) return <Login key={invitation ?? 'login'} invite={invitation} session={session} onCancelInvite={() => go('/masuk', true)} onAuth={(next) => {
-    query.removeQueries({ predicate: ({ queryKey }) => queryKey[0] !== 'session' })
-    query.setQueryData(['session'], next)
+  if (!session || invitation) return <Login key={invitation ?? 'login'} invite={invitation} session={session} onCancelInvite={() => go('/masuk', true)} onAuth={async (next) => {
+    await query.cancelQueries({ queryKey: sessionKey })
+    query.removeQueries(accountQueries)
+    query.setQueryData(sessionKey, next)
     const nextPage = next.user.role === 'warehouse' ? '/pesanan' : '/'
     const target = safeReturn(params.get('kembali'))
     go(!invitation && params.has('kembali') && target !== '/' ? target : nextPage, true)
@@ -225,7 +230,7 @@ export function App() {
           </details>
         </div>
       </header>
-      <main id="konten" className="content" tabIndex={-1}>
+      <main key={section.href} id="konten" className="content" tabIndex={-1}>
         {section.href === '/' && <Suspense fallback={<Loading />}><Dashboard alerts={alerts} open={open} /></Suspense>}
         {section.href === '/pesanan' && <Orders key={url} session={session} params={params} notify={setToast} />}
         {section.href === '/stok' && <Inventory key={url} session={session} params={params} notify={setToast} />}

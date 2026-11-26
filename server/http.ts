@@ -7,7 +7,7 @@ import type { Sql } from './db.js'
 declare module 'fastify' {
   interface FastifyRequest {
     user: SessionUser | null
-    session: { hash: string; csrf: string } | null
+    session: { hash: string; csrf: string } | { hash: null; csrf: string; seenAt: number } | null
   }
 }
 

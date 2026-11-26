@@ -2,6 +2,7 @@ import { hash, argon2id } from 'argon2'
 import type { Database } from './db.js'
 
 export const demoPassword = 'RuangOperasi2026!'
+export const demoEmails: readonly string[] = ['admin@ruangoperasi.test', 'manajer@ruangoperasi.test', 'gudang@ruangoperasi.test']
 
 export async function seedDemo(db: Database) {
   const passwordHash = await hash(demoPassword, { type: argon2id })
@@ -11,10 +12,10 @@ export async function seedDemo(db: Database) {
 
     await sql.rows(`
       INSERT INTO users (email, name, password_hash, role) VALUES
-      ('admin@ruangoperasi.test', 'Raka Pratama', $1, 'admin'),
-      ('manajer@ruangoperasi.test', 'Nadia Putri', $1, 'manager'),
-      ('gudang@ruangoperasi.test', 'Dimas Saputra', $1, 'warehouse')
-    `, [passwordHash])
+      ($2, 'Raka Pratama', $1, 'admin'),
+      ($3, 'Nadia Putri', $1, 'manager'),
+      ($4, 'Dimas Saputra', $1, 'warehouse')
+    `, [passwordHash, ...demoEmails])
     await sql.rows(`
       WITH opening AS (
         INSERT INTO products (sku, name, stock, min_stock) VALUES

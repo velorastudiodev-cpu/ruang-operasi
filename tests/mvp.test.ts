@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -160,4 +161,53 @@ test('lima kegagalan mengunci akun dan sesi tidak aktif berakhir setelah delapan
   assert.equal((await failed()).statusCode, 423)
   await db.rows("UPDATE sessions SET last_seen=now() - interval '8 hours 1 minute' WHERE user_id=3")
   assert.equal((await app.inject({ url: '/api/auth/session', headers: warehouse })).statusCode, 401)
+})
+
+test('sesi akun demo diterima instance lain, terikat pada cookie yang valid, dan kedaluwarsa saat tidak aktif', async () => {
+  const options = {
+    databasePath: 'memory://', demo: true, demoSessionSecret: randomBytes(32).toString('hex'),
+    secure: true, trustProxy: true, jobs: false, onDemand: true, serveFrontend: false,
+  }
+  const [first, second] = await Promise.all([buildApp(options), buildApp(options)])
+  const https = { 'x-forwarded-proto': 'https' }
+  try {
+    const loggedIn = await first.app.inject({
+      method: 'POST', url: '/api/auth/login', headers: https,
+      payload: { email: 'admin@ruangoperasi.test', password: demoPassword },
+    })
+    assert.equal(loggedIn.statusCode, 200, loggedIn.body)
+    const setCookie = String(loggedIn.headers['set-cookie'])
+    assert.match(setCookie, /HttpOnly; Secure; SameSite=Lax/)
+    const cookie = setCookie.split(';')[0]
+    const session = loggedIn.json()
+    const check = (value: string) => second.app.inject({
+      url: '/api/auth/session', headers: { ...https, cookie: value, 'x-background-request': '1' },
+    })
+    const continued = await check(cookie)
+    assert.equal(continued.statusCode, 200, continued.body)
+    assert.deepEqual(continued.json(), session)
+    assert.equal((await second.app.inject({ url: '/api/orders', headers: { ...https, cookie } })).statusCode, 200)
+    assert.equal((await check(cookie.replace('admin', 'gudang'))).statusCode, 401)
+    const signedSession = (seenAt: number) => 'ruang_session=' + encodeURIComponent(first.app.signCookie(
+      `admin@ruangoperasi.test|${session.csrf_token}|${seenAt}`,
+    ))
+    const expiredCookie = signedSession(Date.now() - 8 * 60 * 60_000 - 1)
+    assert.equal((await check(expiredCookie)).statusCode, 401)
+    const idleCookie = signedSession(Date.now() - 7 * 60 * 60_000)
+    assert.equal((await check(idleCookie)).headers['set-cookie'], undefined)
+    const active = await second.app.inject({ url: '/api/orders', headers: { ...https, cookie: idleCookie } })
+    const activity = String(active.headers['set-cookie']).split(';')[0]
+    assert.match(activity, /^ruang_demo_activity=/)
+    assert.equal((await check(`${expiredCookie}; ${activity}`)).statusCode, 200)
+    assert.equal((await check(activity)).statusCode, 401)
+    const loggedOut = await second.app.inject({
+      method: 'POST', url: '/api/auth/logout',
+      headers: { ...https, cookie: `${idleCookie}; ${activity}`, 'x-csrf-token': session.csrf_token },
+    })
+    assert.equal(loggedOut.statusCode, 204)
+    assert.match(String(loggedOut.headers['set-cookie']), /ruang_session=;/)
+    assert.match(String(loggedOut.headers['set-cookie']), /ruang_demo_activity=;/)
+  } finally {
+    await Promise.all([first.app.close(), second.app.close()])
+  }
 })

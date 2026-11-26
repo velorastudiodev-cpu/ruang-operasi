@@ -6,12 +6,14 @@ export interface Session {
 }
 
 export class RequestError extends Error {
-  constructor(public status: number, message: string) { super(message) }
+  constructor(public status: number, message: string, public code?: string) { super(message) }
+  get unauthenticated() { return this.status === 401 && this.code === 'UNAUTHENTICATED' }
 }
 
-export async function api<T>(path: string, options: { method?: string; body?: unknown; csrf?: string; background?: boolean } = {}): Promise<T> {
+export async function api<T>(path: string, options: { method?: string; body?: unknown; csrf?: string; background?: boolean; signal?: AbortSignal } = {}): Promise<T> {
   const response = await fetch('/api' + path, {
     method: options.method ?? 'GET',
+    signal: options.signal,
     headers: {
       ...(options.body !== undefined && { 'Content-Type': 'application/json' }),
       ...(options.csrf && { 'X-CSRF-Token': options.csrf }),
@@ -21,8 +23,9 @@ export async function api<T>(path: string, options: { method?: string; body?: un
   })
   if (!response.ok) {
     const failure = await response.json().catch(() => null)
-    if (response.status === 401 && !path.startsWith('/auth/')) window.dispatchEvent(new Event('session-expired'))
-    throw new RequestError(response.status, failure?.error?.message ?? 'Permintaan gagal. Coba lagi.')
+    const error = new RequestError(response.status, failure?.error?.message ?? 'Permintaan gagal. Coba lagi.', failure?.error?.code)
+    if (error.unauthenticated && !path.startsWith('/auth/')) window.dispatchEvent(new Event('session-check-required'))
+    throw error
   }
   if (response.status === 204) return undefined as T
   return response.json()

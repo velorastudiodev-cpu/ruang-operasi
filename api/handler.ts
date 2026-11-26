@@ -6,6 +6,22 @@ import { buildApp } from '../server/app.js'
 
 let preview: ReturnType<typeof buildApp> | undefined
 
+async function buildPreview() {
+  const demoSessionSecret = process.env.DEMO_SESSION_SECRET
+  if (!demoSessionSecret) throw new Error('DEMO_SESSION_SECRET belum diatur pada fungsi Vercel.')
+  return buildApp({
+    databasePath: 'memory://',
+    dataFolder: await mkdtemp(join(tmpdir(), 'ruang-operasi-')),
+    demo: true,
+    demoSessionSecret,
+    secure: true,
+    trustProxy: true,
+    logger: true,
+    onDemand: true,
+    serveFrontend: false,
+  })
+}
+
 export default async function handler(request: IncomingMessage, reply: ServerResponse) {
   const target = new URL(request.url ?? '/', 'http://vercel.internal')
   if (target.pathname === '/api/handler') {
@@ -15,17 +31,7 @@ export default async function handler(request: IncomingMessage, reply: ServerRes
       request.url = '/api/' + forwardedPath + target.search
     }
   }
-  preview ??= mkdtemp(join(tmpdir(), 'ruang-operasi-')).then((dataFolder) => buildApp({
-    databasePath: 'memory://',
-    dataFolder,
-    demo: true,
-    secure: true,
-    trustProxy: true,
-    logger: true,
-    onDemand: true,
-    serveFrontend: false,
-    origin: undefined,
-  })).catch((error) => {
+  preview ??= buildPreview().catch((error) => {
     preview = undefined
     throw error
   })

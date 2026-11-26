@@ -4,9 +4,10 @@ import { z } from 'zod'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { roles, type SessionUser } from '../shared/domain.js'
 import type { Database, Sql } from './db.js'
+import { demoActivityCookie, readDemoSession, refreshDemoSession, sessionCookie, setDemoSession } from './demo-session.js'
 import { ApiError, audit, equalTokens, identifier, requireUser, schema } from './http.js'
+import { demoEmails } from './seed.js'
 
-const sessionCookie = 'ruang_session'
 const loginInput = z.object({ email: z.email().max(254), password: z.string().min(1).max(128) })
 const passwordInput = z.string().min(12).max(128)
 const inviteInput = z.object({ email: z.email().max(254), name: z.string().trim().min(2).max(100), role: z.enum(roles) })
@@ -24,22 +25,26 @@ interface Account extends SessionUser {
   locked_until: Date | string | null
 }
 
-async function createSession(sql: Sql, reply: FastifyReply, user: SessionUser, secure: boolean) {
-  const token = newToken()
+async function createSession(sql: Sql, reply: FastifyReply, user: SessionUser, config: { secure: boolean; portableDemoSessions: boolean }) {
   const csrf_token = newToken()
-  await sql.rows('INSERT INTO sessions(token_hash,user_id,csrf_token) VALUES($1,$2,$3)', [hashToken(token), user.id, csrf_token])
-  reply.setCookie(sessionCookie, token, { httpOnly: true, secure, sameSite: 'lax', path: '/' })
+  if (config.portableDemoSessions && demoEmails.includes(user.email)) {
+    setDemoSession(reply, user.email, csrf_token)
+  } else {
+    const token = newToken()
+    await sql.rows('INSERT INTO sessions(token_hash,user_id,csrf_token) VALUES($1,$2,$3)', [hashToken(token), user.id, csrf_token])
+    reply.setCookie(sessionCookie, token, { httpOnly: true, secure: config.secure, sameSite: 'lax', path: '/' })
+  }
   return { user: { id: user.id, name: user.name, email: user.email, role: user.role }, csrf_token }
 }
 
-export async function authRoutes(app: FastifyInstance, db: Database, config: { secure: boolean; origin?: string; previewMail: boolean }) {
+export async function authRoutes(app: FastifyInstance, db: Database, config: { secure: boolean; origin?: string; previewMail: boolean; portableDemoSessions: boolean }) {
   const dummyHash = await hash(newToken(), { type: argon2id })
   const requests = new Map<string, { count: number; until: number }>()
   let cleanAfter = 0
   app.decorateRequest('user', null)
   app.decorateRequest('session', null)
 
-  app.addHook('onRequest', async (request) => {
+  app.addHook('onRequest', async (request, reply) => {
     if (!request.url.startsWith('/api/')) return
     const isWrite = !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
     const isIngest = request.url.split('?')[0] === '/api/ingest/orders'
@@ -52,14 +57,23 @@ export async function authRoutes(app: FastifyInstance, db: Database, config: { s
     const token = request.cookies[sessionCookie]
     if (!isIngest && token?.length === 64) {
       const tokenHash = hashToken(token)
-      const [user] = await db.rows<SessionUser & { csrf_token: string; last_seen: Date }>(`
-        SELECT u.id, u.name, u.email, u.role, s.csrf_token, s.last_seen
+      const [user] = await db.rows<SessionUser & { csrf_token: string }>(`
+        SELECT u.id, u.name, u.email, u.role, s.csrf_token
         FROM sessions s JOIN users u ON u.id=s.user_id
         WHERE s.token_hash=$1 AND s.last_seen > now() - interval '8 hours' AND u.is_active
       `, [tokenHash])
       if (user) {
         request.user = { id: user.id, name: user.name, email: user.email, role: user.role }
         request.session = { hash: tokenHash, csrf: user.csrf_token }
+      }
+    } else if (!isIngest && config.portableDemoSessions && token) {
+      const demoSession = readDemoSession(request, token)
+      if (demoSession) {
+        const [user] = await db.rows<SessionUser>('SELECT id, name, email, role FROM users WHERE email=$1 AND is_active', [demoSession.email])
+        if (user) {
+          request.user = user
+          request.session = { hash: null, csrf: demoSession.csrf, seenAt: demoSession.seenAt }
+        }
       }
     }
 
@@ -78,8 +92,13 @@ export async function authRoutes(app: FastifyInstance, db: Database, config: { s
     if (request.session && isWrite && !equalTokens(String(request.headers['x-csrf-token'] ?? ''), request.session.csrf)) {
       throw new ApiError(403, 'CSRF_INVALID', 'Sesi perlu disegarkan sebelum melakukan perubahan.')
     }
-    if (request.session && request.headers['x-background-request'] !== '1') {
-      await db.rows("UPDATE sessions SET last_seen=now() WHERE token_hash=$1 AND last_seen < now() - interval '10 seconds'", [request.session.hash])
+    const session = request.session
+    if (session && request.headers['x-background-request'] !== '1') {
+      if (session.hash !== null) {
+        await db.rows("UPDATE sessions SET last_seen=now() WHERE token_hash=$1 AND last_seen < now() - interval '10 seconds'", [session.hash])
+      } else if (!request.url.startsWith('/api/auth/')) {
+        refreshDemoSession(reply, session.csrf, session.seenAt)
+      }
     }
   })
 
@@ -97,8 +116,8 @@ export async function authRoutes(app: FastifyInstance, db: Database, config: { s
         return failed >= 5 ? 'locked' : 'invalid'
       }
       await sql.rows('UPDATE users SET failed_attempts=0, locked_until=NULL, last_login_at=now() WHERE id=$1', [user.id])
-      if (request.session) await sql.rows('DELETE FROM sessions WHERE token_hash=$1', [request.session.hash])
-      return createSession(sql, reply, user, config.secure)
+      if (request.session?.hash) await sql.rows('DELETE FROM sessions WHERE token_hash=$1', [request.session.hash])
+      return createSession(sql, reply, user, config)
     })
     if (result === 'locked') throw new ApiError(423, 'ACCOUNT_LOCKED', 'Akun dikunci selama 15 menit setelah lima percobaan gagal.')
     if (result === 'invalid') throw new ApiError(401, 'INVALID_CREDENTIALS', 'Email atau kata sandi salah.')
@@ -111,8 +130,10 @@ export async function authRoutes(app: FastifyInstance, db: Database, config: { s
   })
 
   app.post('/api/auth/logout', { schema: schema('Keluar', ['Sesi']) }, async (request, reply) => {
-    if (request.session) await db.rows('DELETE FROM sessions WHERE token_hash=$1', [request.session.hash])
-    reply.clearCookie(sessionCookie, { path: '/', secure: config.secure, httpOnly: true, sameSite: 'lax' })
+    if (request.session?.hash) await db.rows('DELETE FROM sessions WHERE token_hash=$1', [request.session.hash])
+    const cookieOptions = { path: '/', secure: config.secure, httpOnly: true, sameSite: 'lax' } as const
+    reply.clearCookie(sessionCookie, cookieOptions)
+    if (config.portableDemoSessions) reply.clearCookie(demoActivityCookie, cookieOptions)
     return reply.code(204).send()
   })
 
@@ -126,8 +147,8 @@ export async function authRoutes(app: FastifyInstance, db: Database, config: { s
       await sql.rows('UPDATE users SET password_hash=$1,last_login_at=now() WHERE id=$2', [passwordHash, user.id])
       await sql.rows('DELETE FROM invitations WHERE user_id=$1', [user.id])
       await audit(sql, user.id, 'user.activate', 'users', user.id, { invited: true }, { invited: false })
-      if (request.session) await sql.rows('DELETE FROM sessions WHERE token_hash=$1', [request.session.hash])
-      return createSession(sql, reply, user, config.secure)
+      if (request.session?.hash) await sql.rows('DELETE FROM sessions WHERE token_hash=$1', [request.session.hash])
+      return createSession(sql, reply, user, config)
     })
   })
 
