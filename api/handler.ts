@@ -7,6 +7,14 @@ import { buildApp } from '../server/app.js'
 let preview: ReturnType<typeof buildApp> | undefined
 
 export default async function handler(request: IncomingMessage, reply: ServerResponse) {
+  const target = new URL(request.url ?? '/', 'http://vercel.internal')
+  if (target.pathname === '/api/handler') {
+    const forwardedPath = target.searchParams.get('__route')
+    if (forwardedPath) {
+      target.searchParams.delete('__route')
+      request.url = '/api/' + forwardedPath + target.search
+    }
+  }
   preview ??= mkdtemp(join(tmpdir(), 'ruang-operasi-')).then((dataFolder) => buildApp({
     databasePath: 'memory://',
     dataFolder,

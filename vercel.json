@@ -10,7 +10,8 @@
     }
   },
   "rewrites": [
-    { "source": "/healthz", "destination": "/api/healthz" },
+    { "source": "/healthz", "destination": "/api/handler?__route=healthz" },
+    { "source": "/api/:path*", "destination": "/api/handler?__route=:path*" },
     { "source": "/:page(masuk|pesanan|stok|pengguna|audit)", "destination": "/index.html" }
   ]
 }
