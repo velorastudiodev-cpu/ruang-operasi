@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { parse as parseCsv } from 'csv-parse/sync'
 import { z } from 'zod'
-import { shiftDay, statuses, type Order } from '../shared/domain'
+import { shiftDay, statuses, type Order } from '../shared/domain.js'
 import type { FastifyInstance } from 'fastify'
-import type { Database, Sql } from './db'
-import { ApiError, audit, equalTokens, pageInput, requireUser, schema } from './http'
+import type { Database, Sql } from './db.js'
+import { ApiError, audit, equalTokens, pageInput, requireUser, schema } from './http.js'
 
 export const dayInput = z.iso.date()
 export const rangeInput = z.object({ from: dayInput.optional(), to: dayInput.optional() })

@@ -1,9 +1,9 @@
 import { z } from 'zod'
-import { dayInJakarta, shiftDay, type Metrics } from '../shared/domain'
+import { dayInJakarta, shiftDay, type Metrics } from '../shared/domain.js'
 import type { FastifyInstance } from 'fastify'
-import type { Database } from './db'
-import { ApiError, requireUser, schema } from './http'
-import { dayInput, validateRange } from './orders'
+import type { Database } from './db.js'
+import { ApiError, requireUser, schema } from './http.js'
+import { dayInput, validateRange } from './orders.js'
 
 const kpiQuery = z.object({ from: dayInput.optional(), to: dayInput.optional() })
 interface DailyRow {

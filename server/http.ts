@@ -1,8 +1,8 @@
 import { timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import type { FastifyRequest } from 'fastify'
-import type { Role, SessionUser } from '../shared/domain'
-import type { Sql } from './db'
+import type { Role, SessionUser } from '../shared/domain.js'
+import type { Sql } from './db.js'
 
 declare module 'fastify' {
   interface FastifyRequest {

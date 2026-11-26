@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { adjustmentReasons, stockStates, type Product, type StockState } from '../shared/domain'
+import { adjustmentReasons, stockStates, type Product, type StockState } from '../shared/domain.js'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import type { Database, Sql } from './db'
-import { ApiError, audit, identifier, pageInput, requireUser, schema } from './http'
+import type { Database, Sql } from './db.js'
+import { ApiError, audit, identifier, pageInput, requireUser, schema } from './http.js'
 
 const productId = z.object({ id: identifier })
 const productQuery = pageInput.extend({ state: z.enum([...stockStates, 'peringatan']).optional(), q: z.string().trim().max(120).optional() })

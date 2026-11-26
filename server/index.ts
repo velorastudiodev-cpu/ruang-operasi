@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import { resolve } from 'node:path'
-import { buildApp } from './app'
-import { connectDatabase } from './db'
+import { buildApp } from './app.js'
+import { connectDatabase } from './db.js'
 
 const env = process.env
 const migrateOnly = process.argv.includes('--migrate')

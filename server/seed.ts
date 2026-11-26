@@ -1,5 +1,5 @@
 import { hash, argon2id } from 'argon2'
-import type { Database } from './db'
+import type { Database } from './db.js'
 
 export const demoPassword = 'RuangOperasi2026!'
 

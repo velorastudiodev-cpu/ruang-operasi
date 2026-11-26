@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, open, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import nodemailer from 'nodemailer'
-import { statusLabels } from '../shared/domain'
-import type { Database } from './db'
-import { orderBy, orderFields, orderFilters, whereOrders, type Filters, type OrderRow } from './orders'
+import { statusLabels } from '../shared/domain.js'
+import type { Database } from './db.js'
+import { orderBy, orderFields, orderFilters, whereOrders, type Filters, type OrderRow } from './orders.js'
 
 type Mail = { to?: string; recipients?: string[]; subject: string; text: string }
 type Job = { id: string; owner_id: number; payload: unknown; attempts: number }

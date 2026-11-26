@@ -2,9 +2,9 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { argon2id, hash, verify } from 'argon2'
 import { z } from 'zod'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { roles, type SessionUser } from '../shared/domain'
-import type { Database, Sql } from './db'
-import { ApiError, audit, equalTokens, identifier, requireUser, schema } from './http'
+import { roles, type SessionUser } from '../shared/domain.js'
+import type { Database, Sql } from './db.js'
+import { ApiError, audit, equalTokens, identifier, requireUser, schema } from './http.js'
 
 const sessionCookie = 'ruang_session'
 const loginInput = z.object({ email: z.email().max(254), password: z.string().min(1).max(128) })

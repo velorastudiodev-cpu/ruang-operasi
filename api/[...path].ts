@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildApp } from '../server/app'
+import { buildApp } from '../server/app.js'
 
 let preview: ReturnType<typeof buildApp> | undefined
 
